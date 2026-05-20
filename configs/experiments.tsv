@@ -1,0 +1,13 @@
+scale	name	algo	reward	mode	lambda_f	base_model	train_data	val_data	notes
+1.5b	ppo	ppo	official_em		0.0	Qwen2.5-1.5B-Instruct	NQ+HotpotQA	NQ full test	PPO baseline, with continuation in original run
+1.5b	grpo_original	grpo	official_em		0.0	Qwen2.5-1.5B-Instruct	NQ+HotpotQA	NQ full test	Official EM reward
+1.5b	grpo_paper_format	grpo	custom	paper_format	0.2	Qwen2.5-1.5B-Instruct	NQ+HotpotQA	NQ full test	Hard format reward
+1.5b	grpo_soft_format	grpo	custom	soft_format	0.2	Qwen2.5-1.5B-Instruct	NQ+HotpotQA	NQ full test	Soft continuous format reward
+7b	ppo	ppo	official_em		0.0	Qwen2.5-7B-Instruct	NQ+HotpotQA	NQ full test	Same setting as 1.5B experiments
+7b	grpo_original	grpo	official_em		0.0	Qwen2.5-7B-Instruct	NQ+HotpotQA	NQ full test	Same setting as 1.5B experiments
+7b	grpo_paper_format	grpo	custom	paper_format	0.2	Qwen2.5-7B-Instruct	NQ+HotpotQA	NQ full test	Same setting as 1.5B experiments
+7b	grpo_soft_format	grpo	custom	soft_format	0.2	Qwen2.5-7B-Instruct	NQ+HotpotQA	NQ full test	Same setting as 1.5B experiments
+14b	ppo	ppo	official_em		0.0	Qwen2.5-14B-Instruct	NQ+HotpotQA	NQ full test	Same setting as 1.5B experiments
+14b	grpo_original	grpo	official_em		0.0	Qwen2.5-14B-Instruct	NQ+HotpotQA	NQ full test	Same setting as 1.5B experiments
+14b	grpo_paper_format	grpo	custom	paper_format	0.2	Qwen2.5-14B-Instruct	NQ+HotpotQA	NQ full test	Same setting as 1.5B experiments
+14b	grpo_soft_format	grpo	custom	soft_format	0.2	Qwen2.5-14B-Instruct	NQ+HotpotQA	NQ full test	Same setting as 1.5B experiments

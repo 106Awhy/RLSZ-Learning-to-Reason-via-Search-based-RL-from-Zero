@@ -1,0 +1,218 @@
+import os
+import re
+from typing import Optional, Tuple
+
+from verl.utils.reward_score import qa_em
+
+
+ASSISTANT_RE = re.compile(r"<\|im_start\|>assistant\s*", re.IGNORECASE)
+CHAT_END_RE = re.compile(r"(?:<\|im_end\|>|<\|endoftext\|>)\s*$")
+TAG_SPLIT_RE = re.compile(r"(</?(?:think|search|information|answer)>)")
+TAG_FULL_RE = re.compile(r"</?(?:think|search|information|answer)>")
+OPEN_TAG_RE = re.compile(r"<(?:think|search|information|answer)>")
+TAGS = ("think", "search", "information", "answer")
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _strip_chat_end(text: str) -> str:
+    return CHAT_END_RE.sub("", text).strip()
+
+
+def _extract_assistant_content(solution_str: str) -> str:
+    """
+    Reward receives prompt + response. Avoid counting the prompt's example
+    '<answer> xxx </answer>' as the model's answer.
+    """
+    matches = list(ASSISTANT_RE.finditer(solution_str))
+    if matches:
+        return _strip_chat_end(solution_str[matches[-1].end():])
+
+    answer_spans = list(re.finditer(r"<answer>.*?</answer>", solution_str, re.DOTALL))
+
+    if len(answer_spans) >= 2:
+        prompt_example_end = answer_spans[0].end()
+        final_answer_end = answer_spans[-1].end()
+        region = solution_str[prompt_example_end:final_answer_end]
+        open_match = OPEN_TAG_RE.search(region)
+        if open_match:
+            return _strip_chat_end(region[open_match.start():])
+        return _strip_chat_end(region)
+
+    if len(answer_spans) == 1:
+        prompt_example_end = answer_spans[0].end()
+        region = solution_str[prompt_example_end:]
+        open_match = OPEN_TAG_RE.search(region)
+        if open_match:
+            return _strip_chat_end(region[open_match.start():])
+        return ""
+
+    open_match = OPEN_TAG_RE.search(solution_str)
+    if open_match:
+        return _strip_chat_end(solution_str[open_match.start():])
+
+    return ""
+
+
+def _extract_last_answer(content: str) -> Optional[str]:
+    matches = list(re.finditer(r"<answer>(.*?)</answer>", content, re.DOTALL))
+    if not matches:
+        return None
+    return matches[-1].group(1).strip()
+
+
+def _balanced_tags(content: str) -> bool:
+    for tag in TAGS:
+        n_open = len(re.findall(fr"<{tag}>", content))
+        n_close = len(re.findall(fr"</{tag}>", content))
+        if n_open != n_close:
+            return False
+    return True
+
+
+def _is_strict_format(content: str) -> Tuple[bool, str]:
+    """
+    Strict format:
+    <think>...</think>
+    (<search>...</search><information>...</information><think>...</think>)*
+    <answer>...</answer>
+
+    No extra text outside tags is allowed.
+    """
+    content = _strip_chat_end(content)
+
+    if not content:
+        return False, "empty assistant content"
+
+    if not _balanced_tags(content):
+        return False, "unbalanced tags"
+
+    parts = TAG_SPLIT_RE.split(content)
+    state = "start"
+
+    for part in parts:
+        if part == "":
+            continue
+
+        if TAG_FULL_RE.fullmatch(part):
+            if part == "<think>" and state in ("start", "information"):
+                state = "in_think"
+            elif part == "</think>" and state == "in_think":
+                state = "after_think"
+            elif part == "<search>" and state == "after_think":
+                state = "in_search"
+            elif part == "</search>" and state == "in_search":
+                state = "after_search"
+            elif part == "<information>" and state == "after_search":
+                state = "in_information"
+            elif part == "</information>" and state == "in_information":
+                state = "information"
+            elif part == "<answer>" and state == "after_think":
+                state = "in_answer"
+            elif part == "</answer>" and state == "in_answer":
+                state = "end"
+            else:
+                return False, f"unexpected tag {part} in state {state}"
+        else:
+            if state in ("in_think", "in_search", "in_information", "in_answer"):
+                continue
+            if part.strip():
+                return False, f"unexpected text outside tags in state {state}"
+
+    if state != "end":
+        return False, f"incomplete sequence, ended in {state}"
+
+    return True, "valid"
+
+
+def _soft_format_quality(content: str) -> float:
+    """
+    Soft format score q_fmt in [0, 1].
+
+    This is designed for small Instruct models:
+    - hard binary f_format is too sparse;
+    - partial valid action structure should still receive partial credit.
+    """
+    strict_ok, _ = _is_strict_format(content)
+    if strict_ok:
+        return 1.0
+
+    content = _strip_chat_end(content)
+
+    answer = _extract_last_answer(content)
+    has_answer = 1.0 if answer else 0.0
+    balanced = 1.0 if _balanced_tags(content) else 0.0
+
+    searches = re.findall(r"<search>(.*?)</search>", content, re.DOTALL)
+    infos = re.findall(r"<information>(.*?)</information>", content, re.DOTALL)
+
+    valid_search_info_pair = len(searches) == len(infos) and all(q.strip() for q in searches)
+    search_pair_score = 1.0 if valid_search_info_pair else 0.0
+
+    starts_with_think = re.match(r"^\s*<think>.*?</think>", content, re.DOTALL) is not None
+    ends_with_answer = re.search(r"<answer>.*?</answer>\s*$", content, re.DOTALL) is not None
+    boundary_score = 1.0 if (starts_with_think and ends_with_answer) else 0.0
+
+    q_fmt = 0.35 * has_answer + 0.25 * balanced + 0.25 * search_pair_score + 0.15 * boundary_score
+
+    return max(0.0, min(1.0, q_fmt))
+
+
+def compute_score_custom(solution_str, ground_truth, method="strict", format_score=0.0, score=1.0):
+    """
+    Modes:
+
+    SEARCH_R1_REWARD_MODE=paper_format
+      Hard format reward.
+
+    SEARCH_R1_REWARD_MODE=soft_format
+      Small-model soft format reward.
+
+    SEARCH_R1_REWARD_MODE=em
+      Original Search-R1 EM reward.
+    """
+    mode = os.getenv("SEARCH_R1_REWARD_MODE", "soft_format").lower()
+    lambda_f = _env_float("SEARCH_R1_LAMBDA_F", 0.2)
+
+    if mode == "em":
+        return qa_em.compute_score_em(
+            solution_str=solution_str,
+            ground_truth=ground_truth,
+            method=method,
+            format_score=format_score,
+            score=score,
+        )
+
+    content = _extract_assistant_content(solution_str)
+    answer = _extract_last_answer(content)
+
+    if answer is None:
+        answer = qa_em.extract_solution(solution_str)
+
+    correct = bool(answer is not None and qa_em.em_check(answer, ground_truth["target"]))
+    strict_ok, _ = _is_strict_format(content)
+
+    if mode in ("paper_format", "format", "hard_format"):
+        if correct and strict_ok:
+            reward = score
+        elif correct and not strict_ok:
+            reward = score - lambda_f
+        elif (not correct) and strict_ok:
+            reward = lambda_f
+        else:
+            reward = format_score
+    elif mode in ("soft_format", "soft"):
+        q_fmt = _soft_format_quality(content)
+        if correct:
+            reward = score - lambda_f * (1.0 - q_fmt)
+        else:
+            reward = lambda_f * q_fmt
+    else:
+        raise ValueError(f"Unknown SEARCH_R1_REWARD_MODE={mode}")
+
+    return float(max(0.0, min(score, reward)))

@@ -1,0 +1,4 @@
+scale	modelscope_id	local_model_dir
+1.5b	Qwen/Qwen2.5-1.5B-Instruct	models/Qwen2.5-1.5B-Instruct
+7b	Qwen/Qwen2.5-7B-Instruct	models/Qwen2.5-7B-Instruct
+14b	Qwen/Qwen2.5-14B-Instruct	models/Qwen2.5-14B-Instruct

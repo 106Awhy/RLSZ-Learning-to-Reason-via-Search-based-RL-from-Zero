@@ -1,0 +1,13 @@
+model_scale,method,final_nq_em_percent,peak_validation_em_percent_approx,avg_response_length
+1.5B,PPO,38.42,42,547.2
+1.5B,GRPO,36.31,47,542.8
+1.5B,GRPO + Soft Reward,39.39,44,584.4
+1.5B,GRPO + Hard Reward,12.86,32,49.3
+7B,PPO,42.8,47,590
+7B,GRPO,43.6,50,575
+7B,GRPO + Soft Reward,45.2,51,625
+7B,GRPO + Hard Reward,18.5,36,85
+14B,PPO,45.1,49,620
+14B,GRPO,46.3,53,605
+14B,GRPO + Soft Reward,48.0,54,660
+14B,GRPO + Hard Reward,22.0,39,120
