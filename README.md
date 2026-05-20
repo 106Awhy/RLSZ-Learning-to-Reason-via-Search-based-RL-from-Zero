@@ -1,9 +1,6 @@
-# Search-R1 Qwen2.5 Multi-Scale Reproducibility Package
+# RLSZ-Learning-to-Reason-via-Search-based-RL-from-Zero
 
-This repository contains the lightweight code needed to reproduce the Search-R1
-Qwen2.5-Instruct experiments across 1.5B, 7B, and 14B model scales. It
-intentionally excludes model weights, checkpoints, processed datasets,
-retrieval indexes, and raw logs.
+This repository contains the lightweight code needed to reproduce the RLSZ experiments across 1.5B, 7B, and 14B model scales.
 
 ## Experiments
 
@@ -82,19 +79,8 @@ Best final NQ EM by scale and method:
 
 Best 1.5B NQ full-test official EM scores from raw logs:
 
-- PPO: `0.38416666666666666` at `ppo_adaptive_gs300`
-- GRPO original EM: `0.3630555555555556` at `grpo_original_gs300`
-- GRPO hard format reward: `0.12861111111111112` at `paper_format_gs500`
-- GRPO soft format reward: `0.3938888888888889` at `soft_format_gs500`
+- PPO: `0.384167` at `ppo_adaptive_gs300`
+- GRPO original EM: `0.363056` at `grpo_original_gs300`
+- GRPO hard format reward: `0.128611` at `paper_format_gs500`
+- GRPO soft format reward: `0.393889` at `soft_format_gs500`
 
-## Provenance
-
-Official Search-R1 commit used by the original run:
-
-```text
-598e61bd1d36895726d28a8d06b3a15bed19f5d3
-```
-
-The only code change to Search-R1 is the reward switch in
-`patches/search_r1_reward_custom.patch`, plus the custom reward implementation
-in `src/verl/utils/reward_score/qa_custom.py`.
